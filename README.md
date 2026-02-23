@@ -1,6 +1,6 @@
 # promptbeezz
 
-Prompt optimization framework extracted from `interviewee`.
+Prompt optimization framework.
 
 ## What it provides
 
@@ -8,13 +8,10 @@ Prompt optimization framework extracted from `interviewee`.
 - Pluggable target connectors (OpenAI, Anthropic, Minimax, custom).
 - Pluggable evaluator providers (OpenAI, Anthropic, Minimax).
 - Provider-agnostic LLM abstraction for generation, testing, and refinement.
-- Structured outputs through provider-native schemas (JSON schema / tool schema).
 
 ## Runtime configuration
 
 `OptimizerConfig` controls execution behavior and includes request observability settings
-
-These are regular config fields (not env-driven).
 
 ## Development
 
