@@ -1,0 +1,125 @@
+"""Prompt generator service built on BaseLLMClient."""
+
+from pydantic import BaseModel, Field
+
+from promptbeezz.config import LLMConfig
+from promptbeezz.llm.base import BaseLLMClient
+from promptbeezz.schemas import TaskSpec
+
+
+class GeneratedPrompt(BaseModel):
+    """Single generated prompt."""
+
+    id: str = Field(description="Unique identifier for the prompt")
+    strategy: str = Field(description="Strategy used (e.g., 'structured_rules')")
+    prompt_text: str = Field(description="The actual system prompt text")
+
+
+class GeneratedPromptsOutput(BaseModel):
+    """Output structure for generated prompts."""
+
+    prompts: list[GeneratedPrompt] = Field(description="List of generated prompts")
+
+
+class PromptGeneratorAgent:
+    """Prompt generation agent using a provider-agnostic LLM client."""
+
+    def __init__(
+        self,
+        *,
+        llm_client: BaseLLMClient,
+        llm_config: LLMConfig,
+        task_spec: TaskSpec,
+        n: int,
+    ):
+        self.name = "PromptGenerator"
+        self.llm_client = llm_client
+        self.llm_config = llm_config
+        self.instructions = _build_instructions(task_spec=task_spec, n=n)
+
+    async def run(self) -> GeneratedPromptsOutput:
+        return await self.llm_client.generate_structured(
+            "Generate diverse system prompts.",
+            system_prompt=self.instructions,
+            schema=GeneratedPromptsOutput,
+            temperature=self.llm_config.temperature,
+            max_tokens=self.llm_config.max_tokens,
+        )
+
+
+def create_generator_agent(
+    llm_client: BaseLLMClient,
+    llm_config: LLMConfig,
+    task_spec: TaskSpec,
+    n: int = 15,
+) -> PromptGeneratorAgent:
+    """Factory for prompt generator service."""
+    return PromptGeneratorAgent(
+        llm_client=llm_client,
+        llm_config=llm_config,
+        task_spec=task_spec,
+        n=n,
+    )
+
+
+def _build_instructions(task_spec: TaskSpec, n: int) -> str:
+    current_prompt_section = ""
+    if task_spec.current_prompt:
+        current_prompt_section = f"""
+**REFERENCE PROMPT (FOR CONTEXT ONLY)**:
+{task_spec.current_prompt}
+
+**STRICT NON-REUSE POLICY**:
+- Study the reference prompt to understand the domain, tone, and constraints.
+- Generate each new prompt from scratch; do not reuse sentences, bullet structures, or formatting from the reference.
+- Incorporate relevant insights while expressing them in completely original language.
+"""
+
+    return f"""You are an expert prompt engineer who creates PRODUCTION-READY system prompts.
+
+**TASK**: {task_spec.task_description}
+
+**BEHAVIORAL REQUIREMENTS**:
+{task_spec.behavioral_specs}
+
+**VALIDATION RULES**:
+{chr(10).join(f"- {rule}" for rule in task_spec.validation_rules)}
+
+{current_prompt_section}**CRITICAL REQUIREMENTS FOR EACH PROMPT**:
+
+1. **LENGTH**: Each prompt must be 300-600 words (15-30 sentences). This is NOT a summary - it's the COMPLETE prompt that will be used in production.
+
+2. **COMPLETENESS**: Must be immediately usable without any additional context. Include:
+   - Identity/role definition
+   - Detailed behavioral instructions
+   - Specific formatting requirements relevant to the task context
+   - Edge case handling (what to do/not do)
+   - Tone and style guidelines
+   - Examples where helpful
+
+3. **SPECIFICITY**: Use concrete, actionable language. Avoid vague instructions like "be helpful" - instead specify HOW to be helpful.
+
+4. **STRUCTURE**: Organize with clear sections (use headings, numbered lists, bullet points as appropriate for the strategy).
+
+**GENERATION STRATEGIES** (use different approaches for diversity):
+
+1. **Structured Rule-Based**: Numbered sections with explicit rules (e.g., "CRITICAL RULES:", "FORMATTING:", "BOUNDARIES:")
+2. **Detailed Comprehensive**: Thorough paragraph-style instructions covering all scenarios
+3. **Examples-Heavy**: Include 2-3 concrete examples demonstrating expected behavior
+4. **Constraint-Focused**: Lead with boundaries and restrictions, then positive instructions
+5. **Task-Workflow**: Step-by-step process for handling different question types
+6. **Persona-Driven**: Define a specific professional character with clear traits
+7. **Hierarchical**: Priority-based instructions (most critical first)
+8. **Scenario-Based**: Different instructions for different input scenarios
+9. **Principle-First**: Start with core values, derive specific rules
+10. **Hybrid**: Combine multiple approaches (e.g., rules + examples)
+
+**QUALITY STANDARDS**:
+- Each prompt must be self-contained and complete
+- Test mentally: "Could someone use ONLY this prompt and understand exactly what to do?"
+- Include specific details (e.g., "2-3 paragraphs maximum" not just "be concise")
+- Clarify when structured formats are appropriate versus when to remain conversational
+- Address boundaries explicitly (what topics to decline, how to decline them)
+
+**OUTPUT**: Generate exactly {n} diverse, production-ready system prompts. Each should be substantive and immediately usable.
+""".strip()

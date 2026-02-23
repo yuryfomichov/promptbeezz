@@ -1,0 +1,11 @@
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+promptbeezz/data/
+src/promptbeezz/promptbeezz_data/
+example_output/
